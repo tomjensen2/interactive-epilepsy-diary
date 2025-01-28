@@ -13,3 +13,5 @@ This code is an adaptation of https://github.com/tomjensen2/Epilepsy_Seizure_Dia
 -- Adding Changes in Medication dosage to visualisations
 -- Better/more relevant statistics
 -- Sleep/exercise
+
+:credit to chatGPT for help getting this done in an afternoon
