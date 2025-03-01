@@ -7,7 +7,7 @@ In the absence of effective wearable medical devices Epileptologists ultimately 
 
 This code is an adaptation of https://github.com/tomjensen2/Epilepsy_Seizure_Diary_visualisation and uses Plotly.Dash or html/javascript to generate an interactive seizure diary from diary data stored as .csv format.  It provides a clickable heatmap chart of seizure count vs hour that can be viewed with different binning periods.  And a comparison tool where two time periods can be easily compared 
 
-## Click the heatmap to plot detailed data, double click to compare time periods
+### Click the heatmap to plot detailed data, double click to compare time periods
 
 ![image](https://github.com/user-attachments/assets/cf6dcc2a-c8a8-47e2-aaa7-b048714020c0)
 
