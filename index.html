@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Epilepsy Seizure Diary Dashboard</title>
+
+  <!-- Bootstrap CSS -->
+  <link 
+    rel="stylesheet" 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" 
+  />
+
+  <!-- Plotly JS -->
+  <script src="https://cdn.plot.ly/plotly-2.16.1.min.js"></script>
+  
+  <!-- Optionally, Papa Parse for CSV (or you can just use fetch + .text()) -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+  <!-- Include Flatpickr CSS and JS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+    .chart-container {
+      border: 1px solid #ccc;
+      margin-bottom: 30px;
+      padding: 10px;
+    }
+    .chart-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+
+<body class="bg-light">
+<div class="container my-4">
+
+  <h1 class="mb-4">Interactive Epilepsy Seizure Diary Data Dashboard</h1>
+
+  <!-- Row: Controls -->
+  <div class="row mb-4">
+    <!-- Start Date -->
+    <div class="col-auto">
+      <label for="startDate" class="form-label">Start Date:</label>
+      <input 
+        type="date" 
+        id="startDate" 
+        class="form-control" 
+      />
+    </div>
+
+    <!-- End Date -->
+    <div class="col-auto">
+      <label for="endDate" class="form-label">End Date:</label>
+      <input 
+        type="date" 
+        id="endDate" 
+        class="form-control"
+      />
+    </div>
+
+    <!-- Seizure Types -->
+    <div class="col-auto">
+      <label for="seizureTypes" class="form-label">Seizures to Display:</label>
+      <select 
+        id="seizureTypes" 
+        class="form-select" 
+        multiple 
+        style="min-width: 200px;"
+      >
+        <option value="Standard nighttime Seizure" selected> Standard nighttime Seizure </option>
+        <option value="Seizure from Wakefulness" selected>Seizure from Wakefulness</option>
+        <option value="Have continuous focal SE">Have continuous focal SE</option>
+      </select>
+      <small class="text-muted">Hold Ctrl/Command to select multiple.</small>
+    </div>
+
+    <!-- Binning -->
+    <div class="col-auto">
+      <label class="form-label">Heatmap Binning (X-axis):</label>
+      <div class="form-check">
+        <input 
+          class="form-check-input" 
+          type="radio" 
+          name="binning" 
+          id="binWeekly"
+          value="Weekly" 
+        />
+        <label class="form-check-label" for="binWeekly">Weekly</label>
+      </div>
+      <div class="form-check">
+        <input 
+          class="form-check-input" 
+          type="radio" 
+          name="binning" 
+          id="binMonthly" 
+          value="Monthly"
+        />
+        <label class="form-check-label" for="binMonthly">Monthly</label>
+      </div>
+      <div class="form-check">
+        <input 
+          class="form-check-input" 
+          type="radio" 
+          name="binning" 
+          id="binDaily" 
+          value="Daily"
+          checked
+        />
+        <label class="form-check-label" for="binDaily">Daily</label>
+      </div>
+    </div>
+
+    <!-- Show Meds -->
+    <div class="col-auto">
+      <label class="form-label fw-bold">Show Meds:</label>
+      <div class="form-check form-check-inline">
+        <input 
+          class="form-check-input" 
+          type="radio" 
+          name="showMeds" 
+          id="showMedsYes" 
+          value="Yes"
+        />
+        <label class="form-check-label" for="showMedsYes">Yes</label>
+      </div>
+      <div class="form-check form-check-inline">
+        <input 
+          class="form-check-input" 
+          type="radio" 
+          name="showMeds" 
+          id="showMedsNo" 
+          value="No" 
+          checked
+        />
+        <label class="form-check-label" for="showMedsNo">No</label>
+      </div>
+      <div class="form-check">
+        <input 
+          class="form-check-input" 
+          type="checkbox" 
+          id="neededRescue" 
+          value="Yes" 
+        />
+        <label class="form-check-label" for="neededRescue">Needed Rescue Meds</label>
+      </div>
+      
+      <br>
+      <!-- Analysis Range dropdown -->
+      <div class="mb-3">
+        <label class="form-label"><strong>Analysis Range from Heatmap selection</strong></label>
+        <select id="analysisRange" class="form-select" style="width: 220px;">
+          <option value="month" selected>Full Month</option>
+          <option value="2weeks">2 Weeks</option>
+          <option value="2months">2 Months</option>
+          <option value="6months">6 Months</option>
+          <option value="same">Same as Heatmap Binning</option>
+        </select>
+      </div>
+    </div>
+
+  </div> <!-- end row of controls -->
+
+
+  <!-- Row: Main charts -->
+  <div class="row">
+    <!-- Left Column: Bar chart + Heatmap -->
+    <div class="col-md-7">
+      <div class="chart-container">
+        <div class="chart-title">Seizure Counts Over Time</div>
+        <div id="barChart"></div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">Heatmap (Hour of Day)</div>
+        <div id="heatmap"></div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">Drug Dosage Over Time</div>
+        <div id="medGraph"></div>
+        <div class="btn-group mt-3" role="group" aria-label="Medication toggles" id="medToggleGroup">
+          <button type="button" class="btn btn-outline-primary active" data-med="Cenobamate">Cenobamate</button>
+          <button type="button" class="btn btn-outline-primary active" data-med="Vimpat">Vimpat</button>
+          <button type="button" class="btn btn-outline-primary active" data-med="Perampanel">Perampanel</button>
+          <button type="button" class="btn btn-outline-primary active" data-med="Clobazam">Clobazam</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Additional Plots -->
+    <div class="col-md-5">
+      <!-- Detail graphs -->
+      <div class="chart-container">
+        <div class="chart-title">Daily Seizure Counts</div>
+        <div id="dailyGraph"></div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-title">Seizures counts over daytime</div>
+        <div id="hourlyGraph"></div>
+      </div>
+    </div>
+  </div><!-- end row -->
+
+</div> <!-- end container -->
+
+<!-- Bootstrap JS (Optional if you need fancy components) -->
+<script 
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+</script>
+
+<!-- Your custom script -->
+<script> 
+// script.js
+console.log("script.js is running!");
+// Global data array once CSV is loaded
+let globalData = [];
+let firstData = null;
+let secondData = null;
+// Global declaration
+let xLabels = [];
+// On window load, parse CSV and initialize
+window.addEventListener("DOMContentLoaded", () => {
+  // Set default dates (e.g., last 2 years)
+  //setDefaultDates();
+
+  // Parse CSV
+  Papa.parse("When-Did-I_2.csv", {
+    download: true,
+    header: true,
+    complete: function(results) {
+      // results.data is the array of parsed rows
+      globalData = preprocessData(results.data);
+      updateCharts();  // initial render
+      updateMedGraph(); // Update the medication graph
+      console.log("Papa Parse result:", globalData);
+    }
+  });
+
+  // Attach event listeners
+  document.getElementById("startDate").addEventListener("change", updateCharts);
+  document.getElementById("endDate").addEventListener("change", updateCharts);
+  document.getElementById("seizureTypes").addEventListener("change", updateCharts);
+  console.log(document.getElementById("seizureTypes"));
+
+  // Radio for binning
+  document.querySelectorAll("input[name='binning']").forEach(elem => {
+    elem.addEventListener("change", updateCharts);
+  });
+
+  // Radio for showMeds
+  document.querySelectorAll("input[name='showMeds']").forEach(elem => {
+    elem.addEventListener("change", updateCharts);
+  });
+
+  // Check for neededRescue
+  document.getElementById("neededRescue").addEventListener("change", updateCharts);
+
+  // Mode toggle + reset
+  document.querySelectorAll("input[name='modeToggle']").forEach(elem => {
+    elem.addEventListener("change", () => {
+      firstData = null;
+      secondData = null;
+      updateDetailGraphs(null, null); // clear
+    });
+  });
+  // document.getElementById("resetBtn").addEventListener("click", () => {
+  //   firstData = null;
+  //   secondData = null;
+  //   updateDetailGraphs(null, null);
+  // });
+
+  // Analysis range
+  document.getElementById("analysisRange").addEventListener("change", () => {
+    // Possibly re-fetch detail if we already had something clicked
+    if (firstData || secondData) {
+      // In a real app, you'd re-calculate. For now, just clearing.
+      updateDetailGraphs(null, null);
+    }
+  });
+});
+
+/**
+ * Set default start/end date (for example, last 730 days to today).
+ */
+function setDefaultDates() {
+  let end = new Date();
+  let start = new Date();
+  start.setDate(start.getDate() - 730); // 730 days ago
+  document.getElementById("startDate").value = formatDateInput(start);
+  document.getElementById("endDate").value = formatDateInput(end);
+}
+
+/**
+ * Convert a Date to yyyy-mm-dd for <input type="date">
+ */
+function formatDateInput(d) {
+  let yyyy = d.getFullYear();
+  let mm = String(d.getMonth() + 1).padStart(2, "0");
+  let dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * Basic cleanup and transformation:
+ * - parse datetime
+ * - filter out "NHNN VT" in 'Note'
+ * - store "hour"
+ */
+function preprocessData(rows) {
+    return rows
+      // (1) Filter out rows where Note="NHNN VT", matching your Dash logic:
+      .filter(r => r["Note"] !== "NHNN VT")
+  
+      // (2) Convert the 'UTC Time' string into a Date object
+      .map(r => {
+        // Because there's a space in the column name, use r["UTC Time"] (bracket notation)
+        let dt = new Date(r["UTC Time"]);
+  
+        return {
+          datetime: dt,
+          action: r["Action"],  // or however your CSV spells it
+          note: r["Note"] || "",
+          hour: dt.getHours()
+        };
+      });
+  }
+
+/**
+ * Main update function for bar chart + heatmap in the left column.
+ */
+function updateCharts() {
+  // 1) Gather user input
+  let startVal = document.getElementById("startDate").value;
+  let endVal = document.getElementById("endDate").value;
+  let startDate = new Date(startVal);
+  let endDate = new Date(endVal);
+
+  let stSelect = document.getElementById("seizureTypes");
+  let seizureTypes = Array.from(stSelect.selectedOptions).map(o => o.value);
+
+  let binning = document.querySelector("input[name='binning']:checked").value;
+  let showMeds = document.querySelector("input[name='showMeds']:checked").value;
+  let neededRescue = document.getElementById("neededRescue").checked;
+
+  // 2) Filter the raw data
+  let filtered = globalData.filter(d => {
+    return (
+      d.datetime >= startDate &&
+      d.datetime < endDate &&
+      seizureTypes.includes(d.action)
+      // plus any other conditions...
+    );
+  });
+
+  // 3) Build a complete set of bins (including empty ones)
+  let allBins = [];
+  if (binning === "Daily") {
+    allBins = buildAllDailyBins(startDate, endDate);
+  } else if (binning === "Weekly") {
+    allBins = buildAllWeeklyBins(startDate, endDate);
+  } else if (binning === "Monthly") {
+    allBins = buildAllMonthlyBins(startDate, endDate);
+  }
+
+  // 4) Group the filtered data that *does* exist
+  let grouped = groupByPeriod(filtered, binning);
+  // shape: { "2023-01-01": [ items... ], "2023-01-02": [...], ...}
+
+  // 5) Create the bar chart data with reindex
+  xLabels = allBins;
+  //let xLabels = allBins; // guaranteed in ascending order
+  let yCounts = allBins.map(binLabel => {
+    if (grouped[binLabel]) {
+      return grouped[binLabel].length;
+    }
+    return 0;
+  });
+  updateMedGraph();  
+  let barTrace = {
+    x: xLabels,
+    y: yCounts,
+    type: "bar",
+    name: "Seizure Counts"
+  };
+  let barLayout = {
+    margin: { t: 10, b: 30 },
+    height: 180,
+    yaxis: { title: "Seizure Count" }
+  };
+  Plotly.newPlot("barChart", [barTrace], barLayout);
+
+  // 6) Build the 2D array for heatmap
+  let periodHourCounts = allBins.map(label => {
+    let arr24 = new Array(24).fill(0);
+    if (grouped[label]) {
+      grouped[label].forEach(item => {
+        arr24[item.hour]++;
+      });
+    }
+    return arr24;
+  });
+
+  // we want hour across rows or columns
+  let heatmapMatrix = [];
+  for (let hour = 0; hour < 24; hour++) {
+    let row = [];
+    for (let col = 0; col < allBins.length; col++) {
+      row.push(periodHourCounts[col][hour]);
+    }
+    heatmapMatrix.push(row);
+  }
+  // reverse if you want hour=23 at top
+  heatmapMatrix.reverse();
+
+  let heatmapTrace = {
+    z: heatmapMatrix,
+    x: xLabels,
+    y: [...Array(24).keys()].reverse(),
+    type: "heatmap",
+    colorscale: "Viridis"
+  };
+  let heatmapLayout = {
+    margin: { t: 20, b: 20 },
+    height: 600,
+    xaxis: { title: "Time Period", type: "category" },
+    yaxis: { title: "Hour of Day" }
+  };
+
+  Plotly.newPlot("heatmap", [heatmapTrace], heatmapLayout).then(plot => {
+    let lastClickTime = 0;
+    let clickDelay = 300;
+    let clickTimeout = null;
+  
+    plot.on("plotly_click", data => {
+      // The actual x-value from the clicked cell
+      if (!data.points || !data.points[0]) return;
+      let clickedLabel = data.points[0].x;
+  
+      let now = Date.now();
+      if (now - lastClickTime < clickDelay) {
+        // Double-click
+        clearTimeout(clickTimeout);
+        lastClickTime = 0; 
+        handleDoubleClick(clickedLabel);
+      } else {
+        // Single-click
+        lastClickTime = now;
+        clickTimeout = setTimeout(() => {
+          handleSingleClick(clickedLabel);
+        }, clickDelay);
+      }
+    });
+  });
+updateMedGraph();  
+}
+
+function handleSingleClick(label) {
+  console.log("Single click on", label);
+  let newDataset = buildAnalysisSubset(label);
+  if (!newDataset) return;
+  firstData = newDataset;
+  secondData = null;
+
+  // Clear any existing overlays before adding the new blue one
+  clearOverlays();
+
+  // Convert analysis range to appropriate labels, based on binning:
+  let freq = document.querySelector("input[name='binning']:checked").value;
+  let startLabel, endLabel;
+  if (freq === "Daily") {
+    startLabel = new Date(newDataset.min_date).toISOString().slice(0,10);
+    endLabel = new Date(newDataset.max_date).toISOString().slice(0,10);
+  } else if (freq === "Weekly") {
+    startLabel = formatISOWeek(new Date(newDataset.min_date));
+    endLabel = formatISOWeek(new Date(newDataset.max_date));
+  } else if (freq === "Monthly") {
+    let st = new Date(newDataset.min_date);
+    let en = new Date(newDataset.max_date);
+    startLabel = `${st.getFullYear()}-${String(st.getMonth()+1).padStart(2, "0")}`;
+    endLabel = `${en.getFullYear()}-${String(en.getMonth()+1).padStart(2, "0")}`;
+  }
+  addShapeForRange(startLabel, endLabel, "blue", 0.3);
+  updateDetailGraphs(firstData, secondData);
+}
+
+function handleDoubleClick(label) {
+  console.log("Double click on", label);
+  let newDataset = buildAnalysisSubset(label);
+  if (!newDataset) return;
+  
+  // Update firstData/secondData:
+  if (!firstData) {
+    firstData = newDataset;
+  } else {
+    secondData = newDataset;
+  }
+  
+  // Determine the current binning frequency
+  let freq = document.querySelector("input[name='binning']:checked").value;
+  let startLabel, endLabel;
+  
+  if (freq === "Daily") {
+    startLabel = new Date(newDataset.min_date).toISOString().slice(0, 10);
+    endLabel = new Date(newDataset.max_date).toISOString().slice(0, 10);
+  } else if (freq === "Weekly") {
+    // Use your weekly formatting function (e.g., formatISOWeek) to match xLabels format
+    startLabel = formatISOWeek(new Date(newDataset.min_date));
+    endLabel = formatISOWeek(new Date(newDataset.max_date));
+  } else if (freq === "Monthly") {
+    let st = new Date(newDataset.min_date);
+    let en = new Date(newDataset.max_date);
+    startLabel = `${st.getFullYear()}-${String(st.getMonth() + 1).padStart(2, "0")}`;
+    endLabel = `${en.getFullYear()}-${String(en.getMonth() + 1).padStart(2, "0")}`;
+  }
+  
+  // Remove any existing red overlay, then add a new red overlay covering the entire analysis range
+  removeShapeByColor("red");
+  addShapeForRange(startLabel, endLabel, "red", 0.3);
+  
+  updateDetailGraphs(firstData, secondData);
+}
+
+function buildAnalysisSubset(clickedLabel) {
+  // Determine the binning frequency (Daily, Weekly, or Monthly)
+  let freq = document.querySelector("input[name='binning']:checked").value;
+  let [startTime, endTime] = getPeriodDateRange(clickedLabel, freq);
+  if (!startTime || !endTime) {
+    console.warn("Could not parse period:", clickedLabel);
+    return null;
+  }
+  
+  // Get the selected analysis range from the dropdown
+  let analysis = document.getElementById("analysisRange").value;
+  
+  if (analysis === "month") {
+    // Expand to cover the entire calendar month of startTime
+    let monthStart = new Date(startTime.getFullYear(), startTime.getMonth(), 1);
+    let nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 1);
+    let monthEnd = new Date(nextMonth - 1); // last ms of previous day
+    startTime = monthStart;
+    endTime = monthEnd;
+  } else if (analysis === "2weeks") {
+    // Expand 14 days from startTime (minus 1 ms)
+    let plus14 = new Date(startTime.getTime() + 14 * 86400000 - 1);
+    endTime = plus14;
+  } else if (analysis === "2months") {
+    // Expand two months from startTime.
+    let twoMonthsLater = new Date(startTime);
+    twoMonthsLater.setMonth(twoMonthsLater.getMonth() + 2);
+    // Subtract 1 ms to include the last moment of that day
+    twoMonthsLater.setMilliseconds(twoMonthsLater.getMilliseconds() - 1);
+    endTime = twoMonthsLater;
+  } else if (analysis === "6months") {
+    // Expand six months from startTime.
+    let sixMonthsLater = new Date(startTime);
+    sixMonthsLater.setMonth(sixMonthsLater.getMonth() + 6);
+    sixMonthsLater.setMilliseconds(sixMonthsLater.getMilliseconds() - 1);
+    endTime = sixMonthsLater;
+  }
+  // If analysis === "same", no expansion is applied.
+  
+  // Filter globalData by the computed time range
+  let subset = globalData.filter(d => d.datetime >= startTime && d.datetime <= endTime);
+  
+  // Return a detail object that your updateDetailGraphs function can use.
+  return buildDetailDataset(subset, clickedLabel + " (" + analysis + ")", startTime, endTime);
+}
+
+
+function buildAllDailyBins(startDate, endDate) {
+  let bins = [];
+  // Clone so we don't modify the original
+  let cur = new Date(startDate);
+  cur.setHours(0,0,0,0);
+  
+  // Loop until we pass endDate
+  while (cur <= endDate) {
+    // Convert to YYYY-MM-DD label
+    bins.push(formatYYYYMMDD(cur));
+    // move +1 day
+    cur.setDate(cur.getDate() + 1);
+  }
+  return bins;
+}
+
+function formatYYYYMMDD(d) {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function buildAllWeeklyBins(startDate, endDate) {
+  let bins = [];
+  
+  // Find the Monday (or Sunday) of the startDate’s ISO week
+  // For simplicity, let's step 7 days at a time, each labeled "YYYY-Wxx"
+  let cur = findWeekStart(startDate); // function that moves 'cur' back to Monday
+  while (cur <= endDate) {
+    bins.push(formatISOWeek(cur)); 
+    // move +7 days
+    cur.setDate(cur.getDate() + 7);
+  }
+  return bins;
+}
+
+// Jump back to Monday of the same ISO week
+function findWeekStart(date) {
+  let d = new Date(date);
+  // if day is Sunday=0, Monday=1, ... 
+  // We want to subtract (d.getDay()-1) if d.getDay() != 1
+  let day = d.getDay();
+  // In ISO, Monday=1, Sunday=0 or 7 (depending on environment).
+  // A quick approach:
+  let diff = (day + 6) % 7; // how many days since Monday
+  d.setDate(d.getDate() - diff);
+  // set to midnight
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function formatISOWeek(date) {
+  // approximate approach: year + "W" + weekNumber
+  // For a robust method, you might do the classic "Jan 4" trick, 
+  // or rely on a library (date-fns, day.js, etc.)
+  const year = date.getFullYear();
+  // find the ordinal day of the year
+  let jan1 = new Date(year,0,1);
+  let dayOfYear = Math.floor((date - jan1) / 86400000) + 1;
+  let week = Math.ceil(dayOfYear / 7);
+  return `${year}-W${String(week).padStart(2,"0")}`;
+}
+
+function buildAllMonthlyBins(startDate, endDate) {
+  let bins = [];
+  // Start at (startDate's year-month), keep incrementing month
+  let y = startDate.getFullYear();
+  let m = startDate.getMonth(); // 0..11
+  let endY = endDate.getFullYear();
+  let endM = endDate.getMonth();
+
+  // loop from (y,m) up to (endY,endM)
+  while (y < endY || (y === endY && m <= endM)) {
+    bins.push(`${y}-${String(m+1).padStart(2, "0")}`);
+    // increment month
+    m++;
+    if (m > 11) {
+      m = 0;
+      y++;
+    }
+  }
+  return bins;
+}
+
+/**
+ * Group data by period: 'Weekly', 'Monthly', 'Daily'.
+ * Return an object { "2025-W05": [dataItems...], ... }
+ * This is a placeholder approach; you can make it more robust.
+ */
+function groupByPeriod(data, freq) {
+  let groups = {};
+  data.forEach(item => {
+    let label = "";
+    let dt = item.datetime;
+
+    if (freq === "Daily") {
+      // label = yyyy-mm-dd
+      label = dt.toISOString().slice(0,10);
+    } else if (freq === "Weekly") {
+      // approximate "YYYY-Wxx" using ISO week
+      let year = dt.getFullYear();
+      // get ISO week number
+      let oneJan = new Date(year,0,1);
+      let dayOfYear = ((dt - oneJan) / 86400000) + 1;
+      let week = Math.ceil(dayOfYear / 7);
+      label = `${year}-W${String(week).padStart(2,"0")}`;
+    } else if (freq === "Monthly") {
+      // label = YYYY-MM
+      let year = dt.getFullYear();
+      let month = String(dt.getMonth() + 1).padStart(2, "0");
+      label = `${year}-${month}`;
+    } else {
+      label = "Unknown";
+    }
+
+    if (!groups[label]) {
+      groups[label] = [];
+    }
+    groups[label].push(item);
+  });
+  return groups;
+}
+
+/**
+ * Called when user clicks a cell in the heatmap.
+ * 1) We figure out the "analysis range" (same, 2weeks, month).
+ * 2) Gather the subset of data from that range.
+ * 3) Update the detail graphs.
+ */
+function handleHeatmapClick(clickedPeriod, freq) {
+  let analysis = document.getElementById("analysisRange").value;
+  
+  // We'll do a simpler approach:
+  // 1) Convert clickedPeriod string back into a start/end date
+  let [startTime, endTime] = getPeriodDateRange(clickedPeriod, freq);
+  if (!startTime || !endTime) {
+    console.warn("Could not parse period:", clickedPeriod);
+    return;
+  }
+
+  // Expand if analysis===month or 2weeks
+  if (analysis === "month") {
+    let monthStart = new Date(startTime.getFullYear(), startTime.getMonth(), 1);
+    let nextMonth = new Date(monthStart.getFullYear(), monthStart.getMonth()+1, 1);
+    let monthEnd = new Date(nextMonth - 1);  // last millisecond of previous day
+    startTime = monthStart;
+    endTime = monthEnd;
+  } else if (analysis === "2weeks") {
+    let plus14 = new Date(startTime.getTime() + 14*86400000 - 1);
+    endTime = plus14;
+  } 
+  // else if 'same', keep the range
+
+  // 2) Build subset
+  let subset = globalData.filter(d => d.datetime >= startTime && d.datetime <= endTime);
+
+  // 3) Mode logic
+  let modeVal = document.querySelector("input[name='modeToggle']:checked").value;
+  let newDataset = buildDetailDataset(subset, clickedPeriod + " (" + analysis + ")", startTime, endTime);
+
+  if (modeVal === "exploratory") {
+    firstData = newDataset;
+    secondData = null;
+  } else {
+    if (!firstData) {
+      firstData = newDataset;
+    } else {
+      secondData = newDataset;
+    }
+  }
+  updateDetailGraphs(firstData, secondData);
+}
+
+/**
+ * Convert a "Daily" / "Weekly" / "Monthly" label back into [startDate, endDate].
+ * This is a rough example. 
+ */
+function getPeriodDateRange(periodStr, freq) {
+  if (!periodStr) return [null, null];
+
+  if (freq === "Daily") {
+    // "YYYY-MM-DD"
+    let start = new Date(periodStr);
+    let end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    end.setMilliseconds(end.getMilliseconds() - 1);
+    return [start, end];
+  } else if (freq === "Weekly") {
+    // "YYYY-Wxx"
+    // We'll do a minimal approach: parse out year, week
+    let match = periodStr.match(/^(\d{4})-W(\d{2})$/);
+    if (!match) return [null, null];
+    let year = parseInt(match[1], 10);
+    let w = parseInt(match[2], 10);
+    // Rough approach: first day of the year + (w-1)*7
+    let jan1 = new Date(year,0,1);
+    let start = new Date(jan1.getTime() + (w-1)*7*86400000);
+    // adjust to Monday of that week (ISO)
+    while (start.getDay() !== 1) {
+      start.setDate(start.getDate() - 1);
+    }
+    let end = new Date(start.getTime() + 7*86400000 - 1);
+    return [start, end];
+  } else if (freq === "Monthly") {
+    // "YYYY-MM"
+    let parts = periodStr.split("-");
+    if (parts.length < 2) return [null, null];
+    let year = parseInt(parts[0], 10);
+    let month = parseInt(parts[1], 10) - 1;
+    let start = new Date(year, month, 1);
+    let end = new Date(year, month+1, 1);
+    end = new Date(end - 1);
+    return [start, end];
+  }
+  return [null, null];
+}
+
+/**
+ * Build daily + hourly data for the subset, similar to your Python code.
+ */
+function buildDetailDataset(subset, label, startTime, endTime) {
+  // 1) Daily counts
+  let dailyMap = {};
+  let dayCount = 0;
+  if (subset.length > 0) {
+    // build range from min to max day
+    let minDay = new Date(subset[0].datetime);
+    let maxDay = new Date(subset[0].datetime);
+    subset.forEach(d => {
+      if (d.datetime < minDay) minDay = d.datetime;
+      if (d.datetime > maxDay) maxDay = d.datetime;
+    });
+    // normalize to midnight
+    let dayStart = new Date(minDay);
+    dayStart.setHours(0,0,0,0);
+    let dayEnd = new Date(maxDay);
+    dayEnd.setHours(0,0,0,0);
+    
+    // create all days from dayStart..dayEnd
+    let cur = new Date(dayStart);
+    while (cur <= dayEnd) {
+      dailyMap[cur.toISOString().slice(0,10)] = 0;
+      cur.setDate(cur.getDate() + 1);
+    }
+    // count occurrences
+    subset.forEach(d => {
+      let dayStr = new Date(d.datetime).toISOString().slice(0,10);
+      dailyMap[dayStr]++;
+    });
+    dayCount = Object.keys(dailyMap).length;
+  }
+  let dailyCounts = Object.values(dailyMap);
+
+  // 2) Hour samples
+  let hourSamples = subset.map(d => d.hour);
+
+  return {
+    period_str: label,
+    daily_counts: dailyCounts,
+    day_count: dayCount,
+    hour_samples: hourSamples,
+    min_date: startTime.toISOString(),
+    max_date: endTime.toISOString()
+  };
+}
+
+function clearOverlays() {
+  shapeList = [];
+  Plotly.relayout("heatmap", { shapes: [] });
+}
+
+function addShapeForRange(startLabel, endLabel, color, opacity) {
+  // Find the index of the start and end day labels in xLabels.
+  let startIndex = xLabels.indexOf(startLabel);
+  let endIndex = xLabels.indexOf(endLabel);
+  if (startIndex === -1 || endIndex === -1) {
+    console.warn("Overlay range labels not found:", startLabel, endLabel);
+    return;
+  }
+  let newShape = {
+    type: "rect",
+    xref: "x",
+    yref: "y",
+    x0: startIndex - 0.5,
+    x1: endIndex + 0.5,
+    y0: -0.5,
+    y1: 23.5,
+    fillcolor: color,
+    opacity: opacity,
+    line: { width: 0 },
+    layer: "above"
+  };
+  shapeList.push(newShape);
+  Plotly.relayout("heatmap", { shapes: shapeList });
+}
+/**
+ * Update the detail graphs: daily + hourly. 
+ * If secondData is provided, do comparison.
+ */
+function updateDetailGraphs(d1, d2) {
+  // Daily
+  let dailyDiv = document.getElementById("dailyGraph");
+  if (!d1) {
+    Plotly.newPlot(dailyDiv, [], { title: "No data selected yet." });
+    Plotly.newPlot("hourlyGraph", [], { title: "No data selected yet." });
+    return;
+  }
+
+  if (!d2) {
+    // Single dataset
+    let x1 = d1.daily_counts.map((_, i) => i);
+    let dailyTrace1 = {
+      x: x1,
+      y: d1.daily_counts,
+      type: "bar",
+      name: d1.period_str,
+      marker: { color: "blue" }
+    };
+    Plotly.newPlot(dailyDiv, [dailyTrace1], {
+      xaxis: { title: "Day Index" },
+      yaxis: { title: "Count" }
+    });
+
+    // Hourly
+    plotHourlyKDE(d1.hour_samples, "blue", d1.period_str, "hourlyGraph");
+  } else {
+    // Two datasets -> comparison
+    let maxLen = Math.max(d1.daily_counts.length, d2.daily_counts.length);
+    let d1Padded = d1.daily_counts.concat(Array(maxLen - d1.daily_counts.length).fill(0));
+    let d2Padded = d2.daily_counts.concat(Array(maxLen - d2.daily_counts.length).fill(0));
+    let xRange = [...Array(maxLen).keys()];
+
+    let dailyTrace1 = {
+      x: xRange,
+      y: d1Padded,
+      type: "bar",
+      name: d1.period_str,
+      marker: { color: "blue" }
+    };
+    let dailyTrace2 = {
+      x: xRange,
+      y: d2Padded,
+      type: "bar",
+      name: d2.period_str,
+      marker: { color: "red" }
+    };
+    Plotly.newPlot(dailyDiv, [dailyTrace1, dailyTrace2], {
+      title: "Daily Seizure Counts (Comparison)",
+      xaxis: { title: "Day Index" },
+      yaxis: { title: "Count" },
+      barmode: "group"
+    });
+
+    // Hourly
+    // We’ll plot 2 sets of hour samples side-by-side (KDE).
+    plotHourlyKDEComparison(d1.hour_samples, d2.hour_samples, d1.period_str, d2.period_str, "hourlyGraph");
+  }
+}
+function parseDose(note) {
+  // Example: "200 mg" or "250.5 mg"
+  let match = note.match(/(\d+(\.\d+)?)/);
+  return match ? parseFloat(match[1]) : null;
+}
+/**
+ * Basic function to display hour samples in a histogram or approximate a KDE.
+ * True Gaussian KDE in pure JS is non-trivial, so let's just do a simple histogram or line.
+ */
+function plotHourlyKDE(hourSamples, color, label, divId) {
+  let div = document.getElementById(divId);
+  if (!hourSamples || hourSamples.length < 2) {
+    // just plot markers
+    let trace = {
+      x: hourSamples,
+      y: hourSamples.map(() => 0.05),
+      mode: "markers",
+      marker: { color: color },
+      name: label
+    };
+    Plotly.newPlot(div, [trace], {
+      title: "Hourly Distribution",
+      xaxis: {
+    title: "Hour of Day (0-24)",
+    range: [0, 24],  // Show all hours 0..24 always
+    autorange: false
+  },
+      yaxis: { title: "Count / Density" }
+    });
+    return;
+  }
+  // simple histogram
+  let trace = {
+    x: hourSamples,
+    type: "histogram",
+    name: label,
+    marker: { color: color, opacity: 0.6 },
+    autobinx: false,
+    xbins: { start: 0, end: 24, size: 1 }
+  };
+  Plotly.newPlot(div, [trace], {
+    title: "Hourly Distribution",
+    xaxis: { 
+    title: "Hour of Day (0-24)" ,
+    range: [0, 24],  // Show all hours 0..24 always
+    autorange: false
+  },
+    yaxis: { title: "Count" }
+  });
+}
+
+/**
+ * Comparison: overlay 2 histograms or 2 traces on the same chart
+ */
+function plotHourlyKDEComparison(h1, h2, label1, label2, divId) {
+  let div = document.getElementById(divId);
+  if (h1.length < 2 && h2.length < 2) {
+    Plotly.newPlot(div, [], { title: "Not enough data for both sets." });
+    return;
+  }
+  let trace1 = {
+    x: h1,
+    type: "histogram",
+    name: label1,
+    marker: { color: "blue", opacity: 0.5 },
+    autobinx: false,
+    xbins: { start: 0, end: 24, size: 1 }
+  };
+  let trace2 = {
+    x: h2,
+    type: "histogram",
+    name: label2,
+    marker: { color: "red", opacity: 0.5 },
+    autobinx: false,
+    xbins: { start: 0, end: 24, size: 1 }
+  };
+
+  Plotly.newPlot(div, [trace1, trace2], {
+    title: "Hourly Distribution (Comparison)",
+    xaxis: { title: "Hour of Day (0-24)" ,
+    range: [0, 24],  // Show all hours 0..24 always
+    autorange: false},
+    yaxis: { title: "Count" },
+    barmode: "overlay"   // so they overlap
+  });
+}
+// A global array that holds all the overlay shapes
+let shapeList = [];
+
+/**
+ * Remove any shape(s) of a given fill color from shapeList
+ */
+function removeShapeByColor(color) {
+  shapeList = shapeList.filter(s => s.fillcolor !== color);
+  Plotly.relayout("heatmap", { shapes: shapeList });
+}
+
+/**
+ * Add a transparent rectangle overlay on the heatmap for a specific day.
+ * @param {string} dayLabel - The day label (e.g., "2023-02-15") found in xLabels.
+ * @param {string} color - The color for the overlay (e.g., "blue" or "red").
+ * @param {number} opacity - The transparency (0 to 1), e.g. 0.3.
+ */
+function addShapeForDay(dayLabel, color, opacity) {
+  let idx = xLabels.indexOf(dayLabel);
+  if (idx === -1) {
+    console.warn("Could not find day in xLabels:", dayLabel);
+    return;
+  }
+  // Create a rectangle that spans from (idx - 0.5) to (idx + 0.5) on x-axis,
+  // and from -0.5 to 23.5 on y-axis (covering hours 0 to 23)
+  let newShape = {
+    type: "rect",
+    xref: "x",
+    yref: "y",
+    x0: idx - 0.5,
+    x1: idx + 0.5,
+    y0: -0.5,
+    y1: 23.5,
+    fillcolor: color,
+    opacity: opacity,
+    line: { width: 0 },
+    layer: "above"
+  };
+
+  shapeList.push(newShape);
+  Plotly.relayout("heatmap", { shapes: shapeList });
+}
+
+// Global variable for selected medication mapping (customize as needed)
+const medMapping = {
+  "Cenobamate": "Change Cenobamate",
+  "Vimpat": "Change Vimpat dose",
+  "Perampanel": "Change Perampanel ",  // adjust if needed
+  "Clobazam": "Reduce Clobazam"
+};
+/**
+ * Update the medication graph based on the currently active toggle buttons.
+ */
+ function updateMedGraph() {
+  // Get selected medication names by checking buttons with the 'active' class.
+  let medButtons = document.querySelectorAll("#medToggleGroup button");
+  let selectedMeds = [];
+  medButtons.forEach(btn => {
+    if (btn.classList.contains("active")) {
+      selectedMeds.push(btn.getAttribute("data-med"));
+    }
+  });
+  
+  // Map selected meds to the corresponding CSV action strings.
+  let selectedActions = selectedMeds.map(med => medMapping[med]).filter(action => action);
+  
+  // For each selected action, build a step trace.
+  let traces = [];
+  selectedActions.forEach(action => {
+    // Filter events matching this medication action
+    let medEvents = globalData.filter(e => e.action === action);
+    console.log(`Med events for ${action}:`, medEvents.length);
+    
+    // Map each event to an object with datetime and dose using parseDose helper.
+    let medData = medEvents.map(e => {
+      let dose = parseDose(e.note);
+      return { datetime: e.datetime, dose: dose };
+    }).filter(item => item.dose !== null);
+    
+    // Sort events by datetime.
+    medData.sort((a, b) => a.datetime - b.datetime);
+    
+    // Build step arrays for a step function.
+    let stepX = [];
+    let stepY = [];
+    if (medData.length > 0) {
+      // Start at the first event.
+      stepX.push(medData[0].datetime);
+      stepY.push(medData[0].dose);
+      
+      for (let i = 1; i < medData.length; i++) {
+        let prev = medData[i - 1];
+        let curr = medData[i];
+        // Hold previous dose until current event.
+        stepX.push(curr.datetime);
+        stepY.push(prev.dose);
+        // Then jump to current dose.
+        stepX.push(curr.datetime);
+        stepY.push(curr.dose);
+      }
+      
+      // Extend the last dose until now.
+      let now = new Date();
+      if (now > medData[medData.length - 1].datetime) {
+        stepX.push(now);
+        stepY.push(medData[medData.length - 1].dose);
+      }
+    }
+    
+    // Create the trace.
+    let trace = {
+      x: stepX,
+      y: stepY,
+      mode: "lines",
+      type: "scatter",
+      name: action,  // or med name if you prefer
+      line: { shape: "hv" }
+    };
+    traces.push(trace);
+  });
+  
+  // Determine x-axis range from your global xLabels.
+  // Here we assume daily binning for simplicity; adjust if using weekly/monthly.
+  //let xMin = new Date(xLabels[0]);
+  //let xMax = new Date(xLabels[xLabels.length - 1]);
+  
+  let freq = document.querySelector("input[name='binning']:checked").value;
+let xMin, xMax;
+if (freq === "Daily") {
+  xMin = new Date(xLabels[0]);
+  xMax = new Date(xLabels[xLabels.length - 1]);
+} else if (freq === "Weekly") {
+  xMin = parseISOWeek(xLabels[0]);
+  xMax = parseISOWeek(xLabels[xLabels.length - 1]);
+} else if (freq === "Monthly") {
+  xMin = parseYearMonth(xLabels[0]);
+  xMax = parseYearMonth(xLabels[xLabels.length - 1]);
+}
+console.log("xMin:", xMin, "xMax:", xMax);
+
+  let layout = {
+    title: "Medication Dose Over Time",
+    xaxis: {
+      title: "Date",
+      type: "date",
+      range: [xMin, xMax]
+      //autorange: false
+    },
+    yaxis: { title: "Dose (mg)" },
+    height: 400
+  };
+  
+  Plotly.newPlot("medGraph", traces, layout);
+}
+
+/**
+ * Helper function to parse a dose value from a note string.
+ * For example, if note is "200 mg", this extracts 200.
+ */
+function parseDose(note) {
+  let match = note.match(/(\d+(\.\d+)?)/);
+  return match ? parseFloat(match[1]) : null;
+}
+
+/**
+ * (Optional) Call this to add event listeners to the toggle buttons.
+ */
+function initMedToggleButtons() {
+  let medButtons = document.querySelectorAll("#medToggleGroup button");
+  medButtons.forEach(btn => {
+    btn.addEventListener("click", function () {
+      // Toggle the active class.
+      this.classList.toggle("active");
+      // Update the medication graph.
+      updateMedGraph();
+    });
+  });
+}
+
+// Initialize toggle button events after DOM content is loaded.
+window.addEventListener("DOMContentLoaded", initMedToggleButtons);
+
+// Ensure that updateMedGraph() is called after your global data and xLabels are set,
+// for example after parsing CSV and updating the heatmap.
+
+/**
+ * Helper function for weekly binning.
+ * Expects format "YYYY-Www" (e.g. "2024-W42") and returns the Monday of that week.
+ */
+function parseISOWeek(weekStr) {
+  const match = weekStr.match(/^(\d{4})-W(\d{1,2})$/);
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const week = parseInt(match[2], 10);
+  // ISO week: January 4th is always in week 1.
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay(); // 0=Sunday, 1=Monday, etc.
+  const mondayOffset = (jan4Day === 0 ? -6 : 1 - jan4Day);
+  const firstMonday = new Date(year, 0, 4 + mondayOffset);
+  return new Date(firstMonday.getTime() + (week - 1) * 7 * 86400000);
+}
+
+/**
+ * Helper function for monthly binning.
+ * Expects format "YYYY-MM" (e.g. "2024-11") and returns a Date object for the 1st of that month.
+ */
+function parseYearMonth(ymStr) {
+  const parts = ymStr.split("-");
+  if (parts.length < 2) return null;
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  return new Date(year, month, 1);
+}
+document.addEventListener("DOMContentLoaded", function() {
+  // Compute a default date one year ago
+  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+
+  // Initialize Flatpickr on both inputs
+  flatpickr("#startDate", {
+    defaultDate: oneYearAgo,
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "F j, Y",
+    onReady: function(selectedDates, dateStr, instance) {
+      // After the start date is ready, update the charts.
+      updateCharts();
+    }
+  });
+
+  flatpickr("#endDate", {
+    defaultDate: new Date(),
+    dateFormat: "Y-m-d",
+    altInput: true,
+    altFormat: "F j, Y",
+    onReady: function(selectedDates, dateStr, instance) {
+      // Also update charts when the end date picker is ready.
+      updateCharts();
+    }
+  });
+});
+
+</script>
+
+</body>
+</html>
