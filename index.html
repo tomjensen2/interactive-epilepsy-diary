@@ -907,14 +907,14 @@ function updateDetailGraphs(d1, d2) {
       x: xRange,
       y: d1Padded,
       type: "bar",
-      name: d1.period_str,
+      //name: d1.period_str,
       marker: { color: "blue" }
     };
     let dailyTrace2 = {
       x: xRange,
       y: d2Padded,
       type: "bar",
-      name: d2.period_str,
+      //name: d2.period_str,
       marker: { color: "red" }
     };
     Plotly.newPlot(dailyDiv, [dailyTrace1, dailyTrace2], {
