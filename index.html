@@ -262,7 +262,52 @@ function processUploadedData(data) {
     })
     .filter(d => !isNaN(d.datetime));
 }
+function getMedicationName(actionText) {
+  actionText = actionText.toLowerCase();
+  for (const med in medSynonyms) {
+    for (const synonym of medSynonyms[med]) {
+      if (actionText.indexOf(synonym.toLowerCase()) !== -1) {
+        //console.log(`Found "${synonym}" in "${actionText}" => ${med}`);
+        return med; // returns the canonical name (e.g. "Cenobamate")
+      }
+    }
+  }
+  return null;
+}
 
+function populateMedicationButtons() {
+  const medToggleGroup = document.getElementById("medToggleGroup");
+  medToggleGroup.innerHTML = ""; // clear existing buttons
+
+  // Use a Set to gather unique medication names from globalData.
+  let medsFound = new Set();
+  globalData.forEach(row => {
+    let medName = getMedicationName(row.action);
+    if (medName) {
+      medsFound.add(medName);
+    }
+  });
+
+  // If no medications found, you might add a default message.
+  if (medsFound.size === 0) {
+    medToggleGroup.innerHTML = "<p>No medication events found.</p>";
+    return;
+  }
+
+  // Create a button for each medication.
+  medsFound.forEach(med => {
+    let btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-outline-primary btn-sm m-1 active";
+    // Use a data attribute to store the canonical med name.
+    btn.setAttribute("data-med", med);
+    btn.textContent = med;
+    medToggleGroup.appendChild(btn);
+  });
+  
+  // Reinitialize event listeners on the newly created buttons.
+  initMedToggleButtons();
+}
 
 function loadExampleDataset(url) {
   if (url.match(/\.csv$/i)) {
@@ -275,6 +320,7 @@ function loadExampleDataset(url) {
         globalData = processUploadedData(results.data);
         updateCharts();
         populateSeizureTypes();
+        populateMedicationButtons();
         console.log("Loaded CSV dataset from:", url);
       },
       error: function(err) {
@@ -294,6 +340,7 @@ function loadExampleDataset(url) {
         globalData = processUploadedData(jsonData);
         updateCharts();
         populateSeizureTypes();
+        populateMedicationButtons();
         console.log("Loaded Excel dataset from:", url);
       })
       .catch(err => {
@@ -317,6 +364,7 @@ function handleFileUpload(evt) {
       complete: function(results) {
         globalData = processUploadedData(results.data);
         populateSeizureTypes(); // Update dropdown
+        populateMedicationButtons();
         updateCharts();
         
         console.log("Loaded CSV file from user.");
@@ -334,7 +382,7 @@ function handleFileUpload(evt) {
       const worksheet = workbook.Sheets[firstSheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
       globalData = processUploadedData(jsonData);
-      
+      populateMedicationButtons();
       populateSeizureTypes(); // Update dropdown
       updateCharts();
       console.log("Loaded Excel file from user.");
@@ -489,9 +537,19 @@ function populateSeizureTypes() {
     }
     dropdown.appendChild(option);
   });
-  console.log("Seizures to Display updated:", sortedActions);
+  //console.log("Seizures to Display updated:", sortedActions);
   updateCharts() 
 }
+const medSynonyms = {
+  "Carbamazepine": ["tegretol", "carbamazepine"],
+  "Lacosamide": ["vimpat", "lacosamide","Vimpat"],
+  "Cenobamate": ["ontozry","xcopri","cenobamate","change cenobamate"],
+  "Clobazam": ["frisium","onfi","clobazam","change clobazam"],
+  "Lamotrogine": ["lamotrigine","Lamictal","Reduce my lamotrogine last"],
+  "Keppra": ["levetiracetam","Keppra"],
+  "Perampanel": ["perampanel","fycompa"],
+  "Midazolam": ["epistatus","midazolam","Need Rescue meds"]
+};
 
 // CHART UPDATE FUNCTIONS
 function updateCharts() {
@@ -508,7 +566,7 @@ function updateCharts() {
   let filtered = globalData.filter(d => {
     return d.datetime >= startDate && d.datetime < endDate && seizureTypes.includes(d.action);
   });
-  console.log(globalData.slice(0, 10))
+  //console.log(globalData.slice(0, 10))
   // 3) Build bins based on binning
   let allBins = [];
   if (binning === "Daily") {
@@ -671,7 +729,7 @@ function groupByPeriod(data, freq) {
 }
 
 function handleSingleClick(label) {
-  console.log("Single click on", label);
+  //console.log("Single click on", label);
   let newDataset = buildAnalysisSubset(label);
   if (!newDataset) return;
   firstData = newDataset;
@@ -696,7 +754,7 @@ function handleSingleClick(label) {
 }
 
 function handleDoubleClick(label) {
-  console.log("Double click on", label);
+  //console.log("Double click on", label);
   let newDataset = buildAnalysisSubset(label);
   if (!newDataset) return;
   if (!firstData) {
@@ -854,52 +912,80 @@ function addShapeForRange(startLabel, endLabel, color, opacity) {
 
 // Define updateMedGraph so it exists
 function updateMedGraph() {
+  // Get the medications selected via the toggle buttons.
   let medButtons = document.querySelectorAll("#medToggleGroup button");
   let selectedMeds = [];
   medButtons.forEach(btn => {
     if (btn.classList.contains("active")) {
-      selectedMeds.push(btn.getAttribute("data-med"));
+      selectedMeds.push(btn.getAttribute("data-med")); // These should be canonical names
     }
   });
-  let selectedActions = selectedMeds.map(med => medMapping[med]).filter(action => action);
+
   let traces = [];
-  selectedActions.forEach(action => {
-    let medEvents = globalData.filter(e => e.action === action);
-    console.log(`Med events for ${action}:`, medEvents.length);
+  selectedMeds.forEach(med => {
+    // Filter events using getMedicationName (which returns the canonical med name)
+    let medEvents = globalData.filter(e => getMedicationName(e.action) === med);
+    console.log(`Med events for ${med}:`, medEvents.length);
+    
+    // Extract dose from the Note field for each event.
     let medData = medEvents.map(e => {
       let dose = parseDose(e.note);
       return { datetime: e.datetime, dose: dose };
     }).filter(item => item.dose !== null);
+    
+    // Sort the events by datetime.
     medData.sort((a, b) => a.datetime - b.datetime);
-    let stepX = [];
-    let stepY = [];
-    if (medData.length > 0) {
-      stepX.push(medData[0].datetime);
-      stepY.push(medData[0].dose);
-      for (let i = 1; i < medData.length; i++) {
-        let prev = medData[i - 1];
-        let curr = medData[i];
-        stepX.push(curr.datetime);
-        stepY.push(prev.dose);
-        stepX.push(curr.datetime);
-        stepY.push(curr.dose);
+    let middose=10;
+    // For rescue medication "Midazolam", plot as discrete scatter points.
+    if (med === "need rescue meds") {
+      //console.log("Midazollam")
+      let trace = {
+        x: medData.map(item => item.datetime),
+        y: medData.map(item => middose),
+        mode: "markers",
+        type: "scatter",
+        name: med,
+        marker: { size: 15, color: "purple" }
+      };
+      traces.push(trace);
+    } else {
+      // For continuous medications, build a step function plot.
+      let stepX = [];
+      let stepY = [];
+      if (medData.length > 0) {
+        // Start with the first event.
+        stepX.push(medData[0].datetime);
+        stepY.push(medData[0].dose);
+        for (let i = 1; i < medData.length; i++) {
+          let prev = medData[i - 1];
+          let curr = medData[i];
+          // Hold the previous dose until the current event.
+          stepX.push(curr.datetime);
+          stepY.push(prev.dose);
+          // Then switch to the current dose.
+          stepX.push(curr.datetime);
+          stepY.push(curr.dose);
+        }
+        // Extend the last dose until now.
+        let now = new Date();
+        if (now > medData[medData.length - 1].datetime) {
+          stepX.push(now);
+          stepY.push(medData[medData.length - 1].dose);
+        }
       }
-      let now = new Date();
-      if (now > medData[medData.length - 1].datetime) {
-        stepX.push(now);
-        stepY.push(medData[medData.length - 1].dose);
-      }
+      let trace = {
+        x: stepX,
+        y: stepY,
+        mode: "lines",
+        type: "scatter",
+        name: med,
+        line: { shape: "hv" }
+      };
+      traces.push(trace);
     }
-    let trace = {
-      x: stepX,
-      y: stepY,
-      mode: "lines",
-      type: "scatter",
-      name: action,
-      line: { shape: "hv" }
-    };
-    traces.push(trace);
   });
+
+  // Determine x-axis range from global xLabels.
   let freq = document.querySelector("input[name='binning']:checked").value;
   let xMin, xMax;
   if (freq === "Daily") {
@@ -912,13 +998,15 @@ function updateMedGraph() {
     xMin = parseYearMonth(xLabels[0]);
     xMax = parseYearMonth(xLabels[xLabels.length - 1]);
   }
-  console.log("xMin:", xMin, "xMax:", xMax);
+  //console.log("xMin:", xMin, "xMax:", xMax);
+
   let layout = {
     title: "Medication Dose Over Time",
     xaxis: { title: "Date", type: "date", range: [xMin, xMax] },
     yaxis: { title: "Dose (mg)" },
     height: 400
   };
+
   Plotly.newPlot("medGraph", traces, layout);
 }
 
@@ -938,10 +1026,14 @@ function initMedToggleButtons() {
 }
 
 function updateDetailGraphs(d1, d2) {
+  // Determine whether to show legends based on window width.
+  const isMobile = window.innerWidth < 768;
+  let legendSetting = { visible: !isMobile };
+
   let dailyDiv = document.getElementById("dailyGraph");
   if (!d1) {
-    Plotly.newPlot(dailyDiv, [], { title: "No data selected yet." });
-    Plotly.newPlot("hourlyGraph", [], { title: "No data selected yet." });
+    Plotly.newPlot(dailyDiv, [], { title: "No data selected yet.", legend: legendSetting });
+    Plotly.newPlot("hourlyGraph", [], { title: "No data selected yet.", legend: legendSetting });
     return;
   }
   if (!d2) {
@@ -955,7 +1047,8 @@ function updateDetailGraphs(d1, d2) {
     };
     Plotly.newPlot(dailyDiv, [dailyTrace1], {
       xaxis: { title: "Day Index" },
-      yaxis: { title: "Count" }
+      yaxis: { title: "Count" },
+      legend: legendSetting
     });
     plotHourlyKDE(d1.hour_samples, "blue", d1.period_str, "hourlyGraph");
   } else {
@@ -981,7 +1074,8 @@ function updateDetailGraphs(d1, d2) {
       title: "Daily Seizure Counts (Comparison)",
       xaxis: { title: "Day Index" },
       yaxis: { title: "Count" },
-      barmode: "group"
+      barmode: "group",
+      legend: legendSetting
     });
     plotHourlyKDEComparison(d1.hour_samples, d2.hour_samples, d1.period_str, d2.period_str, "hourlyGraph");
   }
@@ -1055,18 +1149,27 @@ function removeShapeByColor(color) {
 }
 
 // medMapping: Maps button text to action strings in the data.
-const medMapping = {
-  "Cenobamate": "Change Cenobamate",
-  "Vimpat": "Change Vimpat dose",
-  "Perampanel": "Change Perampanel",
-  "Clobazam": "Reduce Clobazam"
-};
+// const medMapping = {
+//   "Cenobamate": "Change Cenobamate",
+//   "Vimpat": "Change Vimpat dose",
+//   "Perampanel": "Change Perampanel",
+//   "Clobazam": "Reduce Clobazam",
+//   "Lamotrigine": "Reduce my lamotrogine last"
+// };
 
 function initMedToggleButtons() {
   let medButtons = document.querySelectorAll("#medToggleGroup button");
   medButtons.forEach(btn => {
     btn.addEventListener("click", function () {
       this.classList.toggle("active");
+      // Log the current active meds:
+      let selectedMeds = [];
+      medButtons.forEach(b => {
+        if(b.classList.contains("active")){
+          selectedMeds.push(b.getAttribute("data-med"));
+        }
+      });
+      //console.log("Active medications:", selectedMeds);
       updateMedGraph();
     });
   });
@@ -1091,18 +1194,19 @@ function updateMedGraph() {
   let selectedMeds = [];
   medButtons.forEach(btn => {
     if (btn.classList.contains("active")) {
-      selectedMeds.push(btn.getAttribute("data-med"));
+      selectedMeds.push(btn.getAttribute("data-med")); // These should be the canonical names
     }
   });
-  let selectedActions = selectedMeds.map(med => medMapping[med]).filter(action => action);
+  
   let traces = [];
-  selectedActions.forEach(action => {
-    let medEvents = globalData.filter(e => e.action === action);
-    console.log(`Med events for ${action}:`, medEvents.length);
+  selectedMeds.forEach(med => {
+    let medEvents = globalData.filter(e => getMedicationName(e.action) === med);
+    //console.log(`Med events for ${med}:`, medEvents.length);
     let medData = medEvents.map(e => {
       let dose = parseDose(e.note);
       return { datetime: e.datetime, dose: dose };
     }).filter(item => item.dose !== null);
+    
     medData.sort((a, b) => a.datetime - b.datetime);
     let stepX = [];
     let stepY = [];
@@ -1128,11 +1232,13 @@ function updateMedGraph() {
       y: stepY,
       mode: "lines",
       type: "scatter",
-      name: action,
+      name: med,
       line: { shape: "hv" }
     };
     traces.push(trace);
   });
+  
+  // Determine x-axis range from xLabels, etc.
   let freq = document.querySelector("input[name='binning']:checked").value;
   let xMin, xMax;
   if (freq === "Daily") {
@@ -1145,7 +1251,7 @@ function updateMedGraph() {
     xMin = parseYearMonth(xLabels[0]);
     xMax = parseYearMonth(xLabels[xLabels.length - 1]);
   }
-  console.log("xMin:", xMin, "xMax:", xMax);
+  //console.log("xMin:", xMin, "xMax:", xMax);
   let layout = {
     title: "Medication Dose Over Time",
     xaxis: { title: "Date", type: "date", range: [xMin, xMax] },
