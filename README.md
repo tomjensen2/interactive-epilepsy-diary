@@ -5,7 +5,9 @@ Epilepsy is a medical condition affecting approximately 65 million people worldw
 
 In the absence of effective wearable medical devices Epileptologists ultimately have to judge the efficacy of a change in medication from the patients seizure diary, with limited time in office a good method for visualisation may be valuable to pick out trends in changes in seizures over time. 
 
-This code is an adaptation of https://github.com/tomjensen2/Epilepsy_Seizure_Diary_visualisation and uses Plotly.Dash or html/javascript to generate an interactive seizure diary from diary data stored as .csv format.  It provides a clickable heatmap chart of seizure count vs hour that can be viewed with different binning periods.  And a comparison tool where two time periods can be easily compared 
+This code is an adaptation of https://github.com/tomjensen2/Epilepsy_Seizure_Diary_visualisation and uses html/javascript or plotly.dash to generate an interactive seizure diary from diary data stored as .csv or excel file formats.  It provides a clickable heatmap chart of seizure count vs hour that can be viewed with different binning periods.  And a comparison tool where two time periods can be easily compared.
+
+<strong>The current updated version now works with any properly formatted file (a template excel can be downloaded with instructions).  And anything can be logged whether it be seizures or not. Additional tools are present to identify triggers, the event dependence tool allows you to select trigger variables around which the probability of other selected events can be calculated.
 
 <strong>Click the heatmap to plot detailed data, double click to compare time periods</strong>
 
