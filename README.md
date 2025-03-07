@@ -1,5 +1,5 @@
 # Interactive Seizure Diary Visualisation
-A Python/Plotly.Dash or html/Javascript Interactive epilepsy seizure diary
+An html/Javascript Interactive epilepsy seizure diary (Python/Plotly.Dash version also)
 
 Epilepsy is a medical condition affecting approximately 65 million people worldwide.  Of these people ~30% fail to be effectively treated by anti-seizure drugs.  Many of these patients will be switching between different drug combinations with the aim of better controlling their seizures whilst recording when they have their seizures using a seizure diary.
 
