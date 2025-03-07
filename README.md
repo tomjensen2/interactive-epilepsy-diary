@@ -9,7 +9,8 @@ This code is an adaptation of https://github.com/tomjensen2/Epilepsy_Seizure_Dia
 
 <strong>Click the heatmap to plot detailed data, double click to compare time periods</strong>
 
-![image](https://github.com/user-attachments/assets/cf6dcc2a-c8a8-47e2-aaa7-b048714020c0)
+![image]([Epilepsy Seizure Diary Dashboard.pdf](https://github.com/user-attachments/files/19132181/Epilepsy.Seizure.Diary.Dashboard.pdf)
+)
 
 To Do’s
 
