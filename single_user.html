@@ -248,299 +248,50 @@ let firstData = null;
 let secondData = null;
 let xLabels = [];
 let shapeList = []; // For heatmap overlays
-const defaultFileUrl = "data/When-Did-I_2_ID.xlsx"; // Adjust file path as needed
+const defaultFileUrl = "data/When-Did-I_2.csv"; // Adjust file path as needed
 
-// Improved data processing function with better debugging
+// PROCESS DATA
 function processUploadedData(data) {
-  console.log(`Processing ${data.length} raw rows from file`);
-  
-  // Add debug counters
-  let rowsWithoutAction = 0;
-  let rowsWithInvalidDate = 0;
-  let rowsProcessed = 0;
-  
-  const processed = data
-    .map((row, index) => {
-      // Check if Action is missing
-      if (!row["Action"]) {
-        rowsWithoutAction++;
-        // Show sample of problematic rows for debugging
-        if (rowsWithoutAction < 10) {
-          console.warn(`Row ${index} missing Action:`, row);
-        }
-        return null;
-      }
-      
-      // Extract date from multiple possible column names
-      const rawValue = row["UTC Time"] || row["UTC date"] || row["Date"];
-      
-      if (!rawValue) {
-        rowsWithInvalidDate++;
-        if (rowsWithInvalidDate < 10) {
-          console.warn(`Row ${index} missing date value:`, row);
-        }
-        return null;
-      }
-      
+  return data
+    .filter(row => row["Action"])
+    .map(row => {
+      // Normalize keys: you might also want to lower-case keys, etc.
+      const rawValue = row["UTC date"] || row["Date"] || row["UTC Time"];
       let dt;
-      try {
-        // If rawValue is a string that represents a number, convert it
-        let dateValue = (typeof rawValue === "string" && /^\d+$/.test(rawValue))
-          ? Number(rawValue)
-          : rawValue;
+      // If rawValue is a string that represents a number, convert it.
+      let dateValue = (typeof rawValue === "string" && /^\d+$/.test(rawValue))
+        ? Number(rawValue)
+        : rawValue;
 
-        if (typeof dateValue === "number") {
-          // Check if the number is an Excel serial date (typically a 5-digit number)
-          if (dateValue < 100000) {
-            // Convert Excel serial date (assuming 1900-based) to JavaScript Date
-            dt = new Date((dateValue - 25569) * 86400000);
-          } else {
-            // Assume it's a Unix timestamp
-            if (dateValue < 1e11) {
-              dt = new Date(dateValue * 1000); // Seconds to milliseconds
-            } else {
-              dt = new Date(dateValue); // Already in milliseconds
-            }
-          }
+      if (typeof dateValue === "number") {
+        // Check if the number is an Excel serial date (typically a 5-digit number)
+        if (dateValue < 100000) {
+          // Convert Excel serial date (assuming 1900-based) to JavaScript Date.
+          dt = new Date((dateValue - 25569) * 86400000);
         } else {
-          // Try direct parsing
-          dt = new Date(dateValue);
-
-          if (isNaN(dt.getTime())) {
-            // Check for European-style date with optional time: DD/MM/YYYY or DD/MM/YYYY HH:mm
-            if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateValue)) {
-              const [datePart, timePart] = dateValue.split(" ");
-              const [day, month, year] = datePart.split("/").map(n => parseInt(n));
-              let hour = 0, minute = 0;
-              if (timePart && timePart.includes(":")) {
-                [hour, minute] = timePart.split(":").map(n => parseInt(n));
-              }
-              dt = new Date(year, month - 1, day, hour, minute);
-            }
-            // ISO-like: YYYY-MM-DD
-            else if (/^\d{4}-\d{1,2}-\d{1,2}/.test(dateValue)) {
-              const [year, month, day] = dateValue.split('-').map(n => parseInt(n));
-              dt = new Date(year, month - 1, day);
-            }
+          // Assume it's a Unix timestamp.
+          // If the value is less than 1e11, we assume it's in seconds.
+          if (dateValue < 1e11) {
+            dt = new Date(dateValue * 1000);
+          } else {
+            // Otherwise, assume it's already in milliseconds.
+            dt = new Date(dateValue);
           }
         }
-        
-        if (isNaN(dt.getTime())) {
-          rowsWithInvalidDate++;
-          if (rowsWithInvalidDate < 10) {
-            console.warn(`Row ${index} has invalid date value:`, rawValue);
-          }
-          return null;
-        }
-        
-        rowsProcessed++;
-        return {
-          datetime: dt,
-          action: row["Action"].trim(),
-          note: typeof row["Note"] === "string" ? row["Note"].trim() : (row["Note"] ?? "").toString(),
-          hour: dt.getHours(),
-          id: row["ID"] ? row["ID"].trim() : "Unknown"
-        };
-      } catch (error) {
-        console.error(`Error processing row ${index}:`, error, row);
-        return null;
+      } else {
+        // Otherwise, treat it as a date string.
+        dt = new Date(dateValue);
       }
+      
+      return {
+        datetime: dt,
+        action: row["Action"].trim(),
+        note: row["Note"] ? row["Note"].trim() : "",
+        hour: dt.getHours()
+      };
     })
-    .filter(item => item !== null);
-  
-  console.log(`
-    Data processing summary:
-    - Total rows: ${data.length}
-    - Rows without Action: ${rowsWithoutAction}
-    - Rows with invalid date: ${rowsWithInvalidDate}
-    - Successfully processed: ${rowsProcessed}
-    - Final data length: ${processed.length}
-  `);
-  
-  return processed;
+    .filter(d => !isNaN(d.datetime));
 }
-
-// Improved CSV parsing to handle different CSV formats 
-function loadExampleDataset(url) {
-  if (url.match(/\.csv$/i)) {
-    console.log(`Loading CSV from ${url}`);
-    Papa.parse(url, {
-      download: true,
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => {
-        // Normalize headers to handle capitalization and spacing differences
-        return header.trim();
-      },
-      complete: function(results) {
-  globalData = processUploadedData(results.data);
-
-  if (globalData.length > 0) {
-    const sortedDates = globalData
-      .map(d => d.datetime)
-      .sort((a, b) => a - b);
-    const minDate = sortedDates[0];
-    const maxDate = sortedDates[sortedDates.length - 1];
-
-    document.getElementById("startDate")._flatpickr.setDate(minDate);
-    document.getElementById("endDate")._flatpickr.setDate(maxDate);
-  }
-
-  populateSeizureTypes();
-  populateMedicationButtons();
-  populateUserDropdown();
-  updateCharts();
-  console.log(`Loaded CSV dataset from ${url}: ${globalData.length} records`);
-}
-        
-      ,
-      error: function(err) {
-        console.error("Error loading CSV dataset from", url, ":", err);
-      }
-    });
-  } else if (url.match(/\.(xls|xlsx)$/i)) {
-    console.log(`Loading Excel file from ${url}`);
-    fetch(url)
-      .then(response => response.arrayBuffer())
-      .then(arrayBuffer => {
-        const data = new Uint8Array(arrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Log workbook and worksheet information for debugging
-        console.log("Workbook sheets:", workbook.SheetNames);
-        console.log("First few cells of worksheet:", 
-          XLSX.utils.sheet_to_json(worksheet, { header: 1, range: 0, defval: "" }).slice(0, 3));
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-          defval: "",
-          raw: true,      // Keep raw values for better date handling
-          dateNF: 'yyyy-mm-dd',  // Format for dates
-          header: 1       // Use first row as headers
-        });
-        
-        // Convert the jsonData to have named headers
-        const headers = jsonData[0];
-        const dataWithHeaders = jsonData.slice(1).map(row => {
-          const item = {};
-          headers.forEach((header, i) => {
-            if (header) item[header.trim()] = row[i];
-          });
-          return item;
-        });
-        
-        console.log(`Converted Excel with ${dataWithHeaders.length} rows`);
-        console.log("Sample of first row:", dataWithHeaders[0]);
-        console.log("Available columns:", Object.keys(dataWithHeaders[0]));
-        
-        globalData = processUploadedData(dataWithHeaders);
-        populateSeizureTypes();
-        populateMedicationButtons();
-        populateUserDropdown();
-        updateCharts();
-        console.log(`Loaded Excel dataset from ${url}: ${globalData.length} records`);
-      })
-      .catch(err => {
-        console.error("Error loading Excel dataset from", url, ":", err);
-      });
-  } else {
-    console.error("Unsupported file type for URL:", url);
-  }
-}
-
-// Enhanced file upload handler with better error handling
-function handleFileUpload(evt) {
-  console.log("File upload initiated");
-  const file = evt.target.files[0];
-  if (!file) {
-    console.warn("No file selected");
-    return;
-  }
-  
-  console.log(`Processing file: ${file.name} (${file.size} bytes, ${file.type})`);
-  const fileName = file.name.toLowerCase();
-  
-  if (fileName.endsWith(".csv")) {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header) => {
-        // Normalize headers to handle capitalization and spacing differences
-        return header.trim();
-      },
-      complete: function(results) {
-        console.log(`Parsed CSV with ${results.data.length} rows`);
-        console.log("CSV parsing errors:", results.errors);
-        console.log("Available columns:", results.meta.fields);
-        console.log("Sample of first row:", results.data[0]);
-        
-        globalData = processUploadedData(results.data);
-        populateSeizureTypes();
-        populateMedicationButtons();
-        populateUserDropdown();
-        updateCharts();
-        console.log(`Loaded CSV file from user: ${globalData.length} records`);
-      },
-      error: function(err) {
-        console.error("Error parsing CSV:", err);
-        alert(`Error parsing CSV: ${err.message}`);
-      }
-    });
-  } else if (fileName.endsWith(".xls") || fileName.endsWith(".xlsx")) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { 
-          type: "array",
-          cellDates: true,  // Convert dates to JS Date objects
-          dateNF: 'yyyy-mm-dd' // Date format
-        });
-        
-        console.log("Excel workbook loaded with sheets:", workbook.SheetNames);
-        
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Log the first few cells for debugging
-        const sample = XLSX.utils.sheet_to_json(worksheet, { 
-          header: 1, 
-          range: 0,
-          defval: ""
-        }).slice(0, 3);
-        console.log("Sample rows:", sample);
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-          defval: "",
-          raw: true
-        });
-        
-        console.log(`Converted Excel with ${jsonData.length} rows`);
-        console.log("Sample of first row:", jsonData[0]);
-        console.log("Available columns:", Object.keys(jsonData[0]));
-        
-        globalData = processUploadedData(jsonData);
-        populateSeizureTypes();
-        populateMedicationButtons();
-        populateUserDropdown();
-        updateCharts();
-        console.log(`Loaded Excel file from user: ${globalData.length} records`);
-      } catch (error) {
-        console.error("Error processing Excel file:", error);
-        alert(`Error processing Excel file: ${error.message}`);
-      }
-    };
-    reader.onerror = function(e) {
-      console.error("Error reading Excel file:", e);
-      alert("Error reading the file. Please try again with a different file.");
-    };
-    reader.readAsArrayBuffer(file);
-  } else {
-    alert("Unsupported file type. Please upload a CSV or Excel file.");
-  }
-}
-
 
 
 function getMedicationName(actionText) {
@@ -602,7 +353,6 @@ function loadExampleDataset(url) {
         updateCharts();
         populateSeizureTypes();
         populateMedicationButtons();
-        populateUserDropdown(); // Populate the user dropdown
         console.log("Loaded CSV dataset from:", url);
       },
       error: function(err) {
@@ -623,7 +373,6 @@ function loadExampleDataset(url) {
         updateCharts();
         populateSeizureTypes();
         populateMedicationButtons();
-        populateUserDropdown(); // Populate the user dropdown
         console.log("Loaded Excel dataset from:", url);
       })
       .catch(err => {
@@ -633,6 +382,8 @@ function loadExampleDataset(url) {
     console.error("Unsupported file type for URL:", url);
   }
 }
+
+
 
 function handleFileUpload(evt) {
   const file = evt.target.files[0];
@@ -646,7 +397,6 @@ function handleFileUpload(evt) {
         globalData = processUploadedData(results.data);
         populateSeizureTypes(); // Update dropdown
         populateMedicationButtons();
-        populateUserDropdown(); // Populate the user dropdown
         updateCharts();
         
         console.log("Loaded CSV file from user.");
@@ -663,11 +413,10 @@ function handleFileUpload(evt) {
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
       const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-      
+      //console.log(workbook)
       globalData = processUploadedData(jsonData);
       populateMedicationButtons();
       populateSeizureTypes(); // Update dropdown
-      populateUserDropdown(); // Populate the user dropdown
       updateCharts();
       console.log("Loaded Excel file from user.");
     };
@@ -718,7 +467,7 @@ function runEventDependenceAnalysis() {
         hits.add(lagDays);
       }
     });
-console.log(globalData)
+
     // Now increment the count for each lag that got a hit
     hits.forEach(l => {
       counts[l + maxLag] += 1; 
@@ -846,20 +595,13 @@ function updateCharts() {
   let stSelect = document.getElementById("seizureTypes");
   let seizureTypes = Array.from(stSelect.selectedOptions).map(o => o.value);
   let binning = document.querySelector("input[name='binning']:checked").value;
-  
-  // Get selected user ID
-  let selectedUserId = document.getElementById("userSelect").value;
 
   // 2) Filter raw data
   let filtered = globalData.filter(d => {
-    let dateInRange = d.datetime >= startDate && d.datetime <= endDate;
-    let actionMatches = seizureTypes.includes(d.action);
-    let userMatches = selectedUserId === "all" || d.id === selectedUserId;
-    
-    return dateInRange && actionMatches && userMatches;
+    return d.datetime >= startDate && d.datetime < endDate && seizureTypes.includes(d.action);
   });
-
-// 3) Build bins based on binning
+  //console.log(globalData.slice(0, 10))
+  // 3) Build bins based on binning
   let allBins = [];
   if (binning === "Daily") {
     allBins = buildAllDailyBins(startDate, endDate);
@@ -870,8 +612,8 @@ function updateCharts() {
   }
   xLabels = allBins;
 
-   // 4) Group filtered data by period
-   let grouped = groupByPeriod(filtered, binning);
+  // 4) Group filtered data by period
+  let grouped = groupByPeriod(filtered, binning);
 
   // 5) Create bar chart
   let yCounts = allBins.map(binLabel => (grouped[binLabel] ? grouped[binLabel].length : 0));
@@ -929,13 +671,6 @@ function updateCharts() {
       }
     });
   });
-
- // Update the title to include user info if a specific user is selected
- if (selectedUserId !== "all") {
-    document.querySelector("h1").textContent = `Interactive Epilepsy Seizure Diary Data Dashboard - User ${selectedUserId}`;
-  } else {
-    document.querySelector("h1").textContent = "Interactive Epilepsy Seizure Diary Data Dashboard";
-  }
 
   updateMedGraph();
   populateEventDropdowns();
@@ -1560,38 +1295,6 @@ function updateMedGraph() {
   Plotly.newPlot("medGraph", traces, layout);
 }
 
-function populateUserDropdown() {
-  const dropdown = document.getElementById("userSelect");
-  dropdown.innerHTML = ""; // Clear existing options
-  
-  // Add "All Users" option
-  let allOption = document.createElement("option");
-  allOption.value = "all";
-  allOption.textContent = "All Users";
-  dropdown.appendChild(allOption);
-  
-  // Get unique user IDs from globalData
-  let userIds = [...new Set(globalData.map(row => row.id))].filter(id => id !== "Unknown").sort();
-  
-  // Add each user ID as an option
-  userIds.forEach(id => {
-    let option = document.createElement("option");
-    option.value = id;
-    option.textContent = `User ${id}`;
-    dropdown.appendChild(option);
-  });
-  
-  // Add "Unknown" option at the end if there are any entries with unknown ID
-  if (globalData.some(row => row.id === "Unknown")) {
-    let unknownOption = document.createElement("option");
-    unknownOption.value = "Unknown";
-    unknownOption.textContent = "Unknown User";
-    dropdown.appendChild(unknownOption);
-  }
-  
-  console.log("User dropdown updated with IDs:", userIds);
-}
-
 document.addEventListener("DOMContentLoaded", function() {
   // Bind Flatpickr to date inputs
   flatpickr("#startDate", {
@@ -1639,17 +1342,6 @@ document.addEventListener("DOMContentLoaded", function() {
       updateDetailGraphs(null, null);
     }
   });
-
-  document.getElementById("userSelect").addEventListener("change", function() {
-    // Reset any selected regions on the heatmap when the user changes
-    firstData = null;
-    secondData = null;
-    clearOverlays();
-    
-    // Update charts with the new user filter
-    updateCharts();
-  });
-
   document.getElementById("downloadTemplateBtn").addEventListener("click", function() {
   window.location.href = "data/Simulated_Epilepsy_diary_1.xlsx";
 });
