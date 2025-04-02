@@ -152,7 +152,14 @@
         <div id="barChart"></div>
       </div>
       <div class="chart-container">
-        <div class="chart-title">Heatmap (Hour of Day): Single-click to highlight, double to compare</div>
+        <div class="chart-title">
+          Heatmap (Hour of Day): Single-click to highlight, double-click to compare
+        </div>
+        <!-- Toggle button group for heatmap display mode -->
+        <div id="heatmapToggleGroup" class="btn-group mb-2" role="group">
+          <button type="button" class="btn btn-outline-secondary active" data-mode="count">Count</button>
+          <button type="button" class="btn btn-outline-secondary" data-mode="duration">Duration</button>
+        </div>
         <div id="heatmap"></div>
       </div>
       <div class="chart-container">
@@ -199,6 +206,16 @@
           </div>
           <div class="tab-pane fade" id="tab2" role="tabpanel" aria-labelledby="tab2-tab">
             <div id="acfGraph" style="height:500px;"></div>
+            <div id="tab2" role="tabpanel" aria-labelledby="tab2-tab">
+              <div class="mb-3">
+                <label for="acfLagSlider" class="form-label">Max Lag (weeks):</label>
+                <input type="range" id="acfLagSlider" min="0.1" max="52" step="0.1" value="10">
+                <span id="acfLagValue">10</span> weeks
+              </div>
+              <div id="acfGraph" style="height:500px;"></div>
+            </div>
+
+
           </div>
           <div class="tab-pane fade" id="tab3" role="tabpanel" aria-labelledby="tab3-tab">
             <!-- Event Dependence Controls -->
@@ -250,7 +267,6 @@ let xLabels = [];
 let shapeList = []; // For heatmap overlays
 const defaultFileUrl = "data/When-Did-I_2_ID.xlsx"; // Adjust file path as needed
 
-// Improved data processing function with better debugging
 function processUploadedData(data) {
   console.log(`Processing ${data.length} raw rows from file`);
   
@@ -264,7 +280,6 @@ function processUploadedData(data) {
       // Check if Action is missing
       if (!row["Action"]) {
         rowsWithoutAction++;
-        // Show sample of problematic rows for debugging
         if (rowsWithoutAction < 10) {
           console.warn(`Row ${index} missing Action:`, row);
         }
@@ -290,24 +305,15 @@ function processUploadedData(data) {
           : rawValue;
 
         if (typeof dateValue === "number") {
-          // Check if the number is an Excel serial date (typically a 5-digit number)
           if (dateValue < 100000) {
-            // Convert Excel serial date (assuming 1900-based) to JavaScript Date
             dt = new Date((dateValue - 25569) * 86400000);
           } else {
-            // Assume it's a Unix timestamp
-            if (dateValue < 1e11) {
-              dt = new Date(dateValue * 1000); // Seconds to milliseconds
-            } else {
-              dt = new Date(dateValue); // Already in milliseconds
-            }
+            dt = new Date(dateValue < 1e11 ? dateValue * 1000 : dateValue);
           }
         } else {
-          // Try direct parsing
           dt = new Date(dateValue);
 
           if (isNaN(dt.getTime())) {
-            // Check for European-style date with optional time: DD/MM/YYYY or DD/MM/YYYY HH:mm
             if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateValue)) {
               const [datePart, timePart] = dateValue.split(" ");
               const [day, month, year] = datePart.split("/").map(n => parseInt(n));
@@ -317,7 +323,6 @@ function processUploadedData(data) {
               }
               dt = new Date(year, month - 1, day, hour, minute);
             }
-            // ISO-like: YYYY-MM-DD
             else if (/^\d{4}-\d{1,2}-\d{1,2}/.test(dateValue)) {
               const [year, month, day] = dateValue.split('-').map(n => parseInt(n));
               dt = new Date(year, month - 1, day);
@@ -334,10 +339,17 @@ function processUploadedData(data) {
         }
         
         rowsProcessed++;
+        
+        // NEW: Extract the duration.
+        // Try multiple header names: "Duration", "Seizure Duration", etc.
+        let durationStr = row["Duration"] || row["Seizure Duration"] || "";
+        let duration = parseFloat(durationStr) || 0;
+        
         return {
           datetime: dt,
           action: row["Action"].trim(),
           note: typeof row["Note"] === "string" ? row["Note"].trim() : (row["Note"] ?? "").toString(),
+          duration: duration, // New field
           hour: dt.getHours(),
           id: row["ID"] ? row["ID"].trim() : "Unknown"
         };
@@ -359,6 +371,7 @@ function processUploadedData(data) {
   
   return processed;
 }
+
 
 // Improved CSV parsing to handle different CSV formats 
 function loadExampleDataset(url) {
@@ -390,6 +403,7 @@ function loadExampleDataset(url) {
   populateMedicationButtons();
   populateUserDropdown();
   updateCharts();
+  updateACFGraph()
   console.log(`Loaded CSV dataset from ${url}: ${globalData.length} records`);
 }
         
@@ -439,6 +453,7 @@ function loadExampleDataset(url) {
         populateMedicationButtons();
         populateUserDropdown();
         updateCharts();
+        updateACFGraph()
         console.log(`Loaded Excel dataset from ${url}: ${globalData.length} records`);
       })
       .catch(err => {
@@ -480,6 +495,7 @@ function handleFileUpload(evt) {
         populateMedicationButtons();
         populateUserDropdown();
         updateCharts();
+        updateACFGraph()
         console.log(`Loaded CSV file from user: ${globalData.length} records`);
       },
       error: function(err) {
@@ -525,6 +541,7 @@ function handleFileUpload(evt) {
         populateMedicationButtons();
         populateUserDropdown();
         updateCharts();
+        updateACFGraph()
         console.log(`Loaded Excel file from user: ${globalData.length} records`);
       } catch (error) {
         console.error("Error processing Excel file:", error);
@@ -600,6 +617,7 @@ function loadExampleDataset(url) {
         // Only the needed columns are picked by processUploadedData.
         globalData = processUploadedData(results.data);
         updateCharts();
+        updateACFGraph()
         populateSeizureTypes();
         populateMedicationButtons();
         populateUserDropdown(); // Populate the user dropdown
@@ -621,6 +639,7 @@ function loadExampleDataset(url) {
         // Process the data using our updated function
         globalData = processUploadedData(jsonData);
         updateCharts();
+        updateACFGraph()
         populateSeizureTypes();
         populateMedicationButtons();
         populateUserDropdown(); // Populate the user dropdown
@@ -648,6 +667,7 @@ function handleFileUpload(evt) {
         populateMedicationButtons();
         populateUserDropdown(); // Populate the user dropdown
         updateCharts();
+        updateACFGraph()
         
         console.log("Loaded CSV file from user.");
       },
@@ -669,6 +689,7 @@ function handleFileUpload(evt) {
       populateSeizureTypes(); // Update dropdown
       populateUserDropdown(); // Populate the user dropdown
       updateCharts();
+      updateACFGraph()
       console.log("Loaded Excel file from user.");
     };
     reader.onerror = function(e) {
@@ -823,6 +844,7 @@ function populateSeizureTypes() {
   });
   //console.log("Seizures to Display updated:", sortedActions);
   updateCharts() 
+  updateACFGraph()
 }
 const medSynonyms = {
   "Carbamazepine": ["tegretol", "carbamazepine"],
@@ -874,26 +896,61 @@ function updateCharts() {
    let grouped = groupByPeriod(filtered, binning);
 
   // 5) Create bar chart
-  let yCounts = allBins.map(binLabel => (grouped[binLabel] ? grouped[binLabel].length : 0));
-  let barTrace = { x: xLabels, y: yCounts, type: "bar", name: "Seizure Counts" };
-  let barLayout = { margin: { t: 10, b: 30 }, height: 180, yaxis: { title: "Seizure Count" } };
-  Plotly.newPlot("barChart", [barTrace], barLayout);
+  //let yCounts = allBins.map(binLabel => (grouped[binLabel] ? grouped[binLabel].length : 0));
+  //let barTrace = { x: xLabels, y: yCounts, type: "bar", name: "Seizure Counts" };
+  //let barLayout = { margin: { t: 10, b: 30 }, height: 180, yaxis: { title: "Seizure Count" } };
+  //Plotly.newPlot("barChart", [barTrace], barLayout);
+    let yData;
+    let yAxisTitle;
+    if (heatmapMode === "duration") {
+      // Calculate the average seizure duration for each bin
+      yData = allBins.map(binLabel => {
+        let events = grouped[binLabel] || [];
+        if (events.length > 0) {
+          let totalDuration = events.reduce((sum, event) => sum + event.duration, 0);
+          return totalDuration / events.length;
+        } else {
+          return 0;
+        }
+      });
+      yAxisTitle = "Avg. Seizure Duration";
+    } else {
+      // Default mode: count the number of seizures in each bin
+      yData = allBins.map(binLabel => (grouped[binLabel] ? grouped[binLabel].length : 0));
+      yAxisTitle = "Seizure Count";
+    }
+
+    let barTrace = { x: xLabels, y: yData, type: "bar", name: yAxisTitle };
+    let barLayout = { margin: { t: 10, b: 30 }, height: 180, yaxis: { title: yAxisTitle } };
+    Plotly.newPlot("barChart", [barTrace], barLayout);
+
 
   // 6) Build heatmap matrix
-  let periodHourCounts = allBins.map(label => {
-    let arr24 = new Array(24).fill(0);
-    if (grouped[label]) {
-      grouped[label].forEach(item => { arr24[item.hour]++; });
-    }
-    return arr24;
-  });
+// Build heatmap matrix using either count or total duration per hour.
+let periodHourValues = allBins.map(label => {
+  let arr24 = new Array(24).fill(0);
+  if (grouped[label]) {
+    grouped[label].forEach(item => {
+      if (heatmapMode === "duration") {
+        arr24[item.hour] += parseFloat(item.duration) || 0;
+
+      } else {
+        arr24[item.hour]++; // Count events
+      }
+    });
+  }
+  return arr24;
+});
+
   let heatmapMatrix = [];
   for (let hour = 0; hour < 24; hour++) {
     let row = [];
     for (let col = 0; col < allBins.length; col++) {
-      row.push(periodHourCounts[col][hour]);
+      row.push(periodHourValues[col][hour]);
     }
     heatmapMatrix.push(row);
+    //console.log("Duration value:", row["Duration"], typeof row["Duration"]);
+
   }
   heatmapMatrix.reverse();
   let heatmapTrace = {
@@ -1648,6 +1705,7 @@ document.addEventListener("DOMContentLoaded", function() {
     
     // Update charts with the new user filter
     updateCharts();
+    updateACFGraph()
   });
 
   document.getElementById("downloadTemplateBtn").addEventListener("click", function() {
@@ -1677,8 +1735,110 @@ document.addEventListener("DOMContentLoaded", function() {
   popoverTriggerList.map(function (popoverTriggerEl) {
     return new bootstrap.Popover(popoverTriggerEl);
   });
+
+
+  
 });
 
+document.getElementById("acfLagSlider").addEventListener("input", function() {
+  updateACFGraph();
+});
+
+
+function computeACF(data, maxLag) {
+  const n = data.length;
+  const mean = data.reduce((a, b) => a + b, 0) / n;
+  const variance = data.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n;
+  const acf = [];
+  for (let lag = 0; lag <= maxLag; lag++) {
+    let cov = 0;
+    for (let i = 0; i < n - lag; i++) {
+      cov += (data[i] - mean) * (data[i + lag] - mean);
+    }
+    cov /= (n - lag);
+    acf.push(cov / variance);
+  }
+  return acf;
+}
+
+function getDailyCounts(startDate, endDate) {
+  let dailyMap = {};
+  let cur = new Date(startDate);
+  cur.setHours(0, 0, 0, 0);
+  while (cur <= endDate) {
+    dailyMap[formatYYYYMMDD(cur)] = 0;
+    cur.setDate(cur.getDate() + 1);
+  }
+  globalData.forEach(item => {
+    if (item.datetime >= startDate && item.datetime <= endDate) {
+      let key = formatYYYYMMDD(item.datetime);
+      if (dailyMap.hasOwnProperty(key)) {
+        dailyMap[key]++;
+      }
+    }
+  });
+  // Return an array of counts in date order.
+  return Object.values(dailyMap);
+}
+
+function updateACFGraph() {
+  // Get the selected date range from the date inputs.
+  let startDate = new Date(document.getElementById("startDate").value);
+  let endDate = new Date(document.getElementById("endDate").value);
+  
+  // Get daily counts from the data.
+  let dailyCounts = getDailyCounts(startDate, endDate);
+  if (dailyCounts.length === 0) {
+    Plotly.newPlot("acfGraph", [], { title: "No data for autocorrelation" });
+    return;
+  }
+  
+  // Get max lag in weeks from the slider and convert to days.
+  let sliderVal = parseFloat(document.getElementById("acfLagSlider").value);
+  document.getElementById("acfLagValue").textContent = sliderVal;
+  let maxLagDays = Math.round(sliderVal * 7);
+  
+  // Compute autocorrelation up to the max lag.
+  let acf = computeACF(dailyCounts, maxLagDays);
+  
+  // Create an array for the lags in weeks (convert days to weeks).
+  let lagsInWeeks = acf.map((_, i) => i / 7);
+  
+  let trace = {
+    x: lagsInWeeks,
+    y: acf,
+    mode: "lines+markers",
+    type: "scatter",
+    name: "Autocorrelation"
+  };
+  
+  let layout = {
+    title: "Autocorrelation (Periodicity)",
+    xaxis: { title: "Lag (weeks)" },
+    yaxis: { title: "ACF" },
+    margin: { t: 40, b: 40 }
+  };
+  
+  Plotly.newPlot("acfGraph", [trace], layout);
+}
+
+
+let heatmapMode = "count"; // global variable for heatmap mode
+
+// Attach event listeners so only one button is active at a time.
+document.querySelectorAll("#heatmapToggleGroup button").forEach(btn => {
+  btn.addEventListener("click", function() {
+    // Remove "active" class from all buttons in the group
+    document.querySelectorAll("#heatmapToggleGroup button").forEach(b => b.classList.remove("active"));
+    // Mark this button as active
+    this.classList.add("active");
+    // Update global mode based on the button's data attribute
+    heatmapMode = this.getAttribute("data-mode");
+    // Recalculate the charts (or just the heatmap if you prefer)
+    updateCharts();
+    updateACFGraph()
+  });
+});
 
 </script>
 
